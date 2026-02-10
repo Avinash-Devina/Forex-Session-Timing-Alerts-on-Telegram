@@ -57,8 +57,12 @@ def send_message(text):
         return
 
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    r = requests.post(url, data={"chat_id": CHAT_ID, "text": text})
-    print(r.text)
+    response = requests.post(
+        url,
+        json={"chat_id": CHAT_ID, "text": text},
+        timeout=10
+    )
+    print("Telegram response:", response.status_code, response.text)
 
 # ================= ALERT LOGIC =================
 
@@ -128,7 +132,7 @@ def check_overlap_alerts(state, today):
 # ================= MAIN =================
 
 def main():
-    # 🔴 TEMPORARY TEST ALERT (SAFE)
+    # 🔴 TEMPORARY TEST ALERT
     if SEND_TEST_ALERT:
         send_message("🚨 TEST ALERT: Telegram group integration working")
         return
