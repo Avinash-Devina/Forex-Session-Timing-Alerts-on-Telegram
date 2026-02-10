@@ -2,22 +2,34 @@ name: Forex Market Alerts
 
 on:
   schedule:
-    - cron: "* * * * *"   # every minute
+    - cron: "*/30 * * * *"   # every 30 minutes
   workflow_dispatch:
 
 jobs:
-  run-alert:
+  alerts:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Restore alert state
+        uses: actions/cache@v4
+        with:
+          path: state.json
+          key: forex-alert-state
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Install dependencies
         run: pip install requests pytz
 
       - name: Run alert script
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          DRY_RUN: ${{ secrets.DRY_RUN }}
         run: python forex_alert.py
