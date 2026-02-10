@@ -10,6 +10,8 @@ ALERT_WINDOW_MINUTES = 30
 OVERLAP_ALERT_WINDOW_MINUTES = 30
 
 DRY_RUN = os.getenv("DRY_RUN", "false").lower() == "true"
+SEND_TEST_ALERT = os.getenv("SEND_TEST_ALERT", "false").lower() == "true"
+
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
@@ -53,10 +55,12 @@ def send_message(text):
     if DRY_RUN:
         print(f"[DRY RUN] {text}")
         return
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    requests.post(url, data={"chat_id": CHAT_ID, "text": text})
 
-# ================= CORE LOGIC =================
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    r = requests.post(url, data={"chat_id": CHAT_ID, "text": text})
+    print(r.text)
+
+# ================= ALERT LOGIC =================
 
 def check_opening_alerts(state, today):
     for market, info in MARKETS.items():
@@ -121,7 +125,14 @@ def check_overlap_alerts(state, today):
                 send_message(msg)
                 state[today][key] = True
 
+# ================= MAIN =================
+
 def main():
+    # 🔴 TEMPORARY TEST ALERT (SAFE)
+    if SEND_TEST_ALERT:
+        send_message("🚨 TEST ALERT: Telegram group integration working")
+        return
+
     if is_weekend():
         print("Weekend — skipping alerts.")
         return
