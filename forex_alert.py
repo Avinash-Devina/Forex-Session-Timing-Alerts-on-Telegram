@@ -6,19 +6,13 @@ import pytz
 
 # ================= CONFIG =================
 
-ALERT_WINDOW_MINUTES = 30
-OVERLAP_ALERT_WINDOW_MINUTES = 30
-
-DRY_RUN = os.getenv("DRY_RUN", "false").lower() == "true"
-SEND_TEST_ALERT = os.getenv("SEND_TEST_ALERT", "false").lower() == "true"
+OPEN_ALERT_MINUTES = 5
+OVERLAP_ALERT_MINUTES = 5
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 STATE_FILE = "state.json"
-
-if not DRY_RUN and (not BOT_TOKEN or not CHAT_ID):
-    raise Exception("Missing Telegram credentials")
 
 IST = pytz.timezone("Asia/Kolkata")
 
@@ -39,7 +33,7 @@ OVERLAPS = [
 # ================= HELPERS =================
 
 def is_weekend():
-    return datetime.now(IST).weekday() >= 5
+    return datetime.now(IST).weekday() >= 5  # Sat/Sun
 
 def load_state():
     if os.path.exists(STATE_FILE):
@@ -52,21 +46,12 @@ def save_state(state):
         json.dump(state, f)
 
 def send_message(text):
-    if DRY_RUN:
-        print(f"[DRY RUN] {text}")
-        return
-
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    response = requests.post(
-        url,
-        json={"chat_id": CHAT_ID, "text": text},
-        timeout=10
-    )
-    print("Telegram response:", response.status_code, response.text)
+    requests.post(url, json={"chat_id": CHAT_ID, "text": text})
 
-# ================= ALERT LOGIC =================
+# ================= OPEN ALERTS =================
 
-def check_opening_alerts(state, today):
+def check_open_alerts(state, today):
     for market, info in MARKETS.items():
         tz = pytz.timezone(info["tz"])
         now_market = datetime.now(tz)
@@ -74,17 +59,19 @@ def check_opening_alerts(state, today):
         open_time = datetime.strptime(info["open"], "%H:%M").time()
         open_dt = tz.localize(datetime.combine(now_market.date(), open_time))
 
-        minutes_to_open = (open_dt - now_market).total_seconds() / 60
+        minutes_left = (open_dt - now_market).total_seconds() / 60
         key = f"{market}_open"
 
-        if 0 <= minutes_to_open <= ALERT_WINDOW_MINUTES and not state[today].get(key):
+        if 0 <= minutes_left <= OPEN_ALERT_MINUTES and not state[today].get(key):
             ist_time = open_dt.astimezone(IST).strftime("%I:%M %p")
             msg = (
-                f"🔔 {market} market OPENING soon\n"
-                f"⏰ {ist_time} IST (in {int(minutes_to_open)} min)"
+                f"🔔 {market} SESSION OPENS in 5 minutes\n"
+                f"⏰ {ist_time} IST"
             )
             send_message(msg)
             state[today][key] = True
+
+# ================= OVERLAP ALERTS =================
 
 def check_overlap_alerts(state, today):
     now_ist = datetime.now(IST)
@@ -118,12 +105,12 @@ def check_overlap_alerts(state, today):
         overlap_end = min(e1.astimezone(IST), e2.astimezone(IST))
 
         if overlap_start < overlap_end:
-            minutes_to_overlap = (overlap_start - now_ist).total_seconds() / 60
+            minutes_left = (overlap_start - now_ist).total_seconds() / 60
             key = f"overlap_{m1}_{m2}"
 
-            if 0 <= minutes_to_overlap <= OVERLAP_ALERT_WINDOW_MINUTES and not state[today].get(key):
+            if 0 <= minutes_left <= OVERLAP_ALERT_MINUTES and not state[today].get(key):
                 msg = (
-                    f"🔥 {m1}–{m2} session overlap starting soon\n"
+                    f"🔥 {m1}–{m2} SESSION OVERLAP in 5 minutes\n"
                     f"⏰ {overlap_start.strftime('%I:%M %p')} IST"
                 )
                 send_message(msg)
@@ -132,20 +119,14 @@ def check_overlap_alerts(state, today):
 # ================= MAIN =================
 
 def main():
-    # 🔴 TEMPORARY TEST ALERT
-    if SEND_TEST_ALERT:
-        send_message("🚨 TEST ALERT: Telegram group integration working")
-        return
-
     if is_weekend():
-        print("Weekend — skipping alerts.")
         return
 
     today = datetime.now(IST).strftime("%Y-%m-%d")
     state = load_state()
     state.setdefault(today, {})
 
-    check_opening_alerts(state, today)
+    check_open_alerts(state, today)
     check_overlap_alerts(state, today)
 
     save_state(state)
